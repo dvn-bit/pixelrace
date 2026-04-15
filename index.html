@@ -1,6 +1,6 @@
 
-<!-- saved from url=(0052)file:///C:/Users/Jeremy/Downloads/pixel_race_v5.html -->
-<html><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8"><style>
+
+<style>
 *{box-sizing:border-box;margin:0;padding:0}
 #gw{display:flex;flex-direction:column;align-items:center;padding:.6rem 0;font-family:monospace;color:var(--color-text-primary)}
 #hud{display:flex;gap:7px;margin-bottom:7px;flex-wrap:wrap;justify-content:center}
@@ -9,13 +9,13 @@
 .hv{font-size:15px;font-weight:500;color:var(--color-text-primary)}
 canvas{display:block;border:2px solid var(--color-border-secondary);border-radius:4px;image-rendering:pixelated;image-rendering:crisp-edges}
 #pwrap{display:flex;gap:6px;margin-top:6px;justify-content:center;align-items:center}
-.pslot{width:48px;height:48px;border:2px solid var(--color-border-secondary);border-radius:4px;background:var(--color-background-secondary);display:flex;align-items:center;justify-content:center;font-size:9px;color:var(--color-text-secondary);text-align:center;line-height:1.3;flex-direction:column}
+.pslot{width:52px;height:52px;border:2px solid var(--color-border-secondary);border-radius:4px;background:var(--color-background-secondary);display:flex;align-items:center;justify-content:center;font-size:9px;color:var(--color-text-secondary);text-align:center;line-height:1.3;flex-direction:column}
 .pslot.ready{border-color:#E24B4A;color:#E24B4A}.pslot.rfly{border-color:#7F77DD;color:#7F77DD}.pslot.rb{border-color:#1D9E75;color:#1D9E75}
 #ctrl{margin-top:4px;font-size:10px;color:var(--color-text-secondary);text-align:center;line-height:1.8}
 #cwrap{position:relative;display:inline-block}
 #ovl{position:absolute;top:0;left:0;display:flex;flex-direction:column;align-items:center;justify-content:center;border-radius:4px;gap:0}
 </style>
-</head><body><div id="gw">
+<div id="gw">
   <div id="hud">
     <div class="hb"><div class="hl">speed</div><div class="hv" id="sv">0</div></div>
     <div class="hb"><div class="hl">score</div><div class="hv" id="sc">0</div></div>
@@ -24,113 +24,127 @@ canvas{display:block;border:2px solid var(--color-border-secondary);border-radiu
   </div>
   <div id="cwrap">
     <canvas id="c" width="380" height="520"></canvas>
-    <div id="ovl" style="width: 380px; height: 520px; background: transparent;">
-  <div style="width:100%;height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:0">
-    <div style="height:160px"></div>
-    <button id="btnN" style="margin:8px 0;padding:12px 44px;background:#1D9E75;color:#fff;border:none;border-radius:4px;font-size:14px;font-weight:500;cursor:pointer;letter-spacing:2px;font-family:monospace">NORMAL RACE</button>
-    <button id="btnZ" style="margin:8px 0;padding:12px 44px;background:#2C1654;color:#9FE1CB;border:2px solid #534AB7;border-radius:4px;font-size:14px;font-weight:500;cursor:pointer;letter-spacing:2px;font-family:monospace">NIGHT MODE</button>
-    <div style="margin-top:10px;font-size:10px;color:rgba(255,255,255,0.4);font-family:monospace;text-align:center">Night mode: zombie riders + flashlight</div>
-  </div></div>
+    <div id="ovl" style="width:380px;height:520px;background:transparent;"></div>
   </div>
   <div id="pwrap">
     <div class="pslot" id="ps0"><span>FIRE</span><span id="pc0" style="font-size:13px;margin-top:2px">--</span></div>
     <div class="pslot" id="ps1"><span>FLY</span><span id="pc1" style="font-size:13px;margin-top:2px">--</span></div>
     <div class="pslot" id="ps2"><span>BOOST</span><span id="pc2" style="font-size:13px;margin-top:2px">--</span></div>
-    <div style="font-size:10px;color:var(--color-text-secondary);line-height:1.7;margin-left:4px">F=fire<br>J=fly 5s<br>B=boost</div>
+    <div style="font-size:10px;color:var(--color-text-secondary);line-height:1.7;margin-left:4px">F=fire<br>J=fly 7s<br>B=boost</div>
   </div>
-  <div id="ctrl">← → steer &nbsp;|&nbsp; W/↑ speed &nbsp;|&nbsp; F fire &nbsp;|&nbsp; J fly (5s) &nbsp;|&nbsp; B boost</div>
+  <div id="ctrl">← → steer &nbsp;|&nbsp; W/↑ speed &nbsp;|&nbsp; F fire &nbsp;|&nbsp; J fly(7s) &nbsp;|&nbsp; B boost+invincible</div>
 </div>
 <script>
 (function(){
 const CV=document.getElementById('c'),ctx=CV.getContext('2d');
 const W=380,H=520;
 const OVL=document.getElementById('ovl');
-
 const RL=70,RR=310,RW=240,LW=80;
 const LANES=[RL+LW*.5,RL+LW*1.5,RL+LW*2.5];
 
-let gameMode='normal'; // 'normal' | 'night'
+// --- Audio ---
+const AC=new(window.AudioContext||window.webkitAudioContext)();
+function resumeAC(){if(AC.state==='suspended')AC.resume();}
+function playTone(freq,dur,type,vol,detune){
+  resumeAC();
+  try{
+    const o=AC.createOscillator(),g=AC.createGain();
+    o.type=type||'square';o.frequency.value=freq;
+    if(detune)o.detune.value=detune;
+    g.gain.setValueAtTime(vol||0.18,AC.currentTime);
+    g.gain.exponentialRampToValueAtTime(0.001,AC.currentTime+dur);
+    o.connect(g);g.connect(AC.destination);
+    o.start();o.stop(AC.currentTime+dur);
+  }catch(e){}
+}
+function playNoise(dur,vol,lpFreq){
+  resumeAC();
+  try{
+    const buf=AC.createBuffer(1,AC.sampleRate*dur,AC.sampleRate);
+    const d=buf.getChannelData(0);for(let i=0;i<d.length;i++)d[i]=Math.random()*2-1;
+    const src=AC.createBufferSource(),g=AC.createGain(),f=AC.createBiquadFilter();
+    f.type='lowpass';f.frequency.value=lpFreq||800;
+    src.buffer=buf;
+    g.gain.setValueAtTime(vol||0.3,AC.currentTime);
+    g.gain.exponentialRampToValueAtTime(0.001,AC.currentTime+dur);
+    src.connect(f);f.connect(g);g.connect(AC.destination);
+    src.start();src.stop(AC.currentTime+dur);
+  }catch(e){}
+}
+function sndCrash(){playNoise(0.4,0.5,600);playTone(80,0.3,'sawtooth',0.25);}
+function sndFire(){playTone(880,0.06,'square',0.15);playTone(1200,0.08,'square',0.1,-200);}
+function sndPickup(){playTone(660,0.08,'sine',0.2);setTimeout(()=>playTone(880,0.1,'sine',0.18),60);}
+function sndBoost(){playTone(200,0.15,'sawtooth',0.2);playTone(320,0.2,'sawtooth',0.15,100);}
+function sndFly(){playTone(440,0.2,'sine',0.15);playTone(660,0.25,'sine',0.12);}
+function sndEngineTick(){if(Math.random()>.85)playTone(60+speed*4,0.04,'sawtooth',0.04);}
+function sndZombieKill(){playNoise(0.25,0.35,400);playTone(120,0.2,'sawtooth',0.2);}
+function sndRunnerKill(){playNoise(0.15,0.25,900);playTone(300,0.15,'square',0.15);}
+function sndWin(){[523,659,784,1047].forEach((f,i)=>setTimeout(()=>playTone(f,0.3,'sine',0.2),i*120));}
+
+let gameMode='normal';
 let state='home';
-let score=0,best={normal:0,night:0};
+let score=0,best={normal:0,dawn:0};
 let roadY=0,speed=3.5,targetSpeed=3.5;
 const BASE=3.5,MAX=12;
 
-let P={x:LANES[1],y:H-130,vx:0,hp:3,flying:false,flyT:0,flyH:0,boosting:false,boostT:0,stunT:0,flashT:0,w:28,h:50};
+let P={x:LANES[1],y:H-130,vx:0,hp:3,flying:false,flyT:0,flyH:0,boosting:false,boostT:0,invincT:0,stunT:0,flashT:0,w:28,h:50};
 let held={fire:0,fly:0,boost:0};
 let npcs=[],particles=[],dashes=[],puItems=[],projs=[];
 let npcT=0,puT=0;
 const keys={};
 let raf=0,lastTS=0;
+let wingWobble=0;
 
-// flashlight
-let flashAngle=0,flashDrift=0,flickerT=0,flickerAmt=1;
+// Dawn sky animated bands
+let dawnScroll=0;
 
 document.addEventListener('keydown',e=>{
   if(!keys[e.key]){keys[e.key]=true;
     if(state==='playing'){
-      if(e.key==='f'||e.key==='F') usePU('fire');
-      if(e.key==='j'||e.key==='J') usePU('fly');
-      if(e.key==='b'||e.key==='B') usePU('boost');
+      if(e.key==='f'||e.key==='F')usePU('fire');
+      if(e.key==='j'||e.key==='J')usePU('fly');
+      if(e.key==='b'||e.key==='B')usePU('boost');
     }
   }
 });
 document.addEventListener('keyup',e=>keys[e.key]=false);
 
-// ---- OVERLAY SCREENS ----
 function showHome(){
   state='home';
-  OVL.style.background='rgba(4,8,4,0.0)';
-  OVL.innerHTML='';
-  // draw on canvas instead
-  renderHome();
-  // attach click via canvas overlay div
   OVL.style.background='transparent';
   OVL.innerHTML=`
   <div style="width:100%;height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:0">
-    <div style="height:160px"></div>
+    <div style="height:150px"></div>
     <button id="btnN" style="margin:8px 0;padding:12px 44px;background:#1D9E75;color:#fff;border:none;border-radius:4px;font-size:14px;font-weight:500;cursor:pointer;letter-spacing:2px;font-family:monospace">NORMAL RACE</button>
-    <button id="btnZ" style="margin:8px 0;padding:12px 44px;background:#2C1654;color:#9FE1CB;border:2px solid #534AB7;border-radius:4px;font-size:14px;font-weight:500;cursor:pointer;letter-spacing:2px;font-family:monospace">NIGHT MODE</button>
-    <div style="margin-top:10px;font-size:10px;color:rgba(255,255,255,0.4);font-family:monospace;text-align:center">Night mode: zombie riders + flashlight</div>
+    <button id="btnZ" style="margin:8px 0;padding:12px 44px;background:#4a2800;color:#FAC775;border:2px solid #BA7517;border-radius:4px;font-size:14px;font-weight:500;cursor:pointer;letter-spacing:2px;font-family:monospace">DAWN MODE</button>
+    <div style="margin-top:10px;font-size:10px;color:rgba(255,200,100,0.6);font-family:monospace;text-align:center">Dawn: zombies + runners + flashlight cone</div>
   </div>`;
   document.getElementById('btnN').onclick=()=>startGame('normal');
-  document.getElementById('btnZ').onclick=()=>startGame('night');
+  document.getElementById('btnZ').onclick=()=>startGame('dawn');
+  renderHome();
 }
 
-let homeAnim=0,homeRaf=0;
+let homeRaf=0,homeAnim=0;
 function renderHome(){
   cancelAnimationFrame(homeRaf);
   function frame(){
     homeAnim+=0.04;
     ctx.clearRect(0,0,W,H);
-    // sky
-    ctx.fillStyle='#05080F';ctx.fillRect(0,0,W,H);
-    // stars
-    for(let i=0;i<60;i++){
-      const sx=(Math.sin(i*137.5+homeAnim*.05)*0.5+0.5)*W;
-      const sy=(Math.cos(i*97.3)*0.5+0.5)*H*.55;
-      const br=.4+.6*Math.abs(Math.sin(homeAnim+i));
-      ctx.fillStyle=`rgba(255,255,220,${br})`;
-      ctx.fillRect(Math.round(sx),Math.round(sy),2,2);
-    }
-    // title
-    ctx.fillStyle='#FAC775';
-    ctx.font='bold 28px monospace';ctx.textAlign='center';
+    drawDawnSky(homeAnim*2,true);
+    ctx.fillStyle='#3a2a1a';ctx.fillRect(0,0,RL,H);
+    ctx.fillStyle='#3a2a1a';ctx.fillRect(RR,0,W-RR,H);
+    ctx.fillStyle='#2a1e10';ctx.fillRect(RL,0,RW,H);
+    ctx.fillStyle='rgba(250,199,117,0.7)';
+    for(let i=0;i<5;i++)ctx.fillRect(W/2-2,300+i*28+(homeAnim*40)%28,4,16);
+    ctx.fillStyle='#FAC775';ctx.font='bold 28px monospace';ctx.textAlign='center';
     ctx.fillText('PIXEL',W/2,80);
-    ctx.fillStyle='#E24B4A';
-    ctx.font='bold 36px monospace';
+    ctx.fillStyle='#E24B4A';ctx.font='bold 36px monospace';
     ctx.fillText('RACE',W/2,122);
-    // subtitle
-    ctx.fillStyle='rgba(255,255,255,0.35)';
-    ctx.font='10px monospace';ctx.textAlign='center';
+    ctx.fillStyle='rgba(255,220,150,0.4)';ctx.font='10px monospace';ctx.textAlign='center';
     ctx.fillText('choose your mode',W/2,148);
-    // animated demo car
     const cx=W/2+Math.sin(homeAnim*.7)*40;
-    drawCar(ctx,cx,340,'#E24B4A','#FCEBEB','#2C2C2A',0,Math.sin(homeAnim*3)*8);
-    // road strip
-    ctx.fillStyle='#1a1a18';ctx.fillRect(RL,300,RW,160);
-    ctx.fillStyle='rgba(250,199,117,0.6)';
-    for(let i=0;i<5;i++) ctx.fillRect(W/2-2,310+i*28+(homeAnim*40)%28,4,16);
-    if(state==='home') homeRaf=requestAnimationFrame(frame);
+    drawCar(ctx,cx,360,'#E24B4A','#FCEBEB','#2C2C2A',0,Math.sin(homeAnim*3)*8);
+    if(state==='home')homeRaf=requestAnimationFrame(frame);
   }
   homeRaf=requestAnimationFrame(frame);
 }
@@ -141,10 +155,10 @@ function startGame(mode){
   OVL.style.background='transparent';
   OVL.innerHTML='';
   score=0;speed=BASE;targetSpeed=BASE;
-  P={x:LANES[1],y:H-130,vx:0,hp:mode==='night'?4:3,flying:false,flyT:0,flyH:0,boosting:false,boostT:0,stunT:0,flashT:0,w:28,h:50};
+  P={x:LANES[1],y:H-130,vx:0,hp:mode==='dawn'?4:3,flying:false,flyT:0,flyH:0,boosting:false,boostT:0,invincT:0,stunT:0,flashT:0,w:28,h:50};
   held={fire:0,fly:0,boost:0};
   npcs=[];particles=[];puItems=[];projs=[];
-  npcT=0;puT=0;roadY=0;flashAngle=0;flashDrift=0;flickerT=0;flickerAmt=1;
+  npcT=0;puT=0;roadY=0;dawnScroll=0;wingWobble=0;
   initDashes();updateSlots();
   state='playing';lastTS=0;
   cancelAnimationFrame(raf);
@@ -153,30 +167,36 @@ function startGame(mode){
 
 function showGameOver(){
   state='gameover';
-  if(score>best[gameMode]) best[gameMode]=score;
-  OVL.style.background='rgba(4,4,8,0.82)';
+  if(score>best[gameMode])best[gameMode]=score;
+  OVL.style.background='rgba(10,5,0,0.85)';
   OVL.innerHTML=`
   <div style="display:flex;flex-direction:column;align-items:center;gap:10px">
-    <div style="font-size:22px;font-weight:500;letter-spacing:2px;color:#fff">${gameMode==='night'?'DEVOURED!':'WRECKED!'}</div>
-    <div style="font-size:12px;color:rgba(255,255,255,0.65)">Score: ${score} &nbsp;|&nbsp; Best: ${best[gameMode]}</div>
+    <div style="font-size:22px;font-weight:500;letter-spacing:2px;color:#FAC775">${gameMode==='dawn'?'DEVOURED!':'WRECKED!'}</div>
+    <div style="font-size:12px;color:rgba(255,220,150,0.7)">Score: ${score} &nbsp;|&nbsp; Best: ${best[gameMode]}</div>
     <button id="rBtn" style="margin-top:6px;padding:9px 26px;background:#E24B4A;color:#fff;border:none;border-radius:4px;font-size:13px;font-weight:500;cursor:pointer;font-family:monospace">RETRY</button>
-    <button id="hBtn" style="padding:8px 26px;background:transparent;color:rgba(255,255,255,0.55);border:1px solid rgba(255,255,255,0.2);border-radius:4px;font-size:12px;cursor:pointer;font-family:monospace">HOME</button>
+    <button id="hBtn" style="padding:8px 26px;background:transparent;color:rgba(255,200,100,0.6);border:1px solid rgba(255,200,100,0.3);border-radius:4px;font-size:12px;cursor:pointer;font-family:monospace">HOME</button>
   </div>`;
   document.getElementById('rBtn').onclick=()=>startGame(gameMode);
   document.getElementById('hBtn').onclick=showHome;
 }
 
-function initDashes(){
-  dashes=[];
-  for(let i=0;i<14;i++){dashes.push({y:i*56});dashes.push({y:i*56+14});}
-}
+function initDashes(){dashes=[];for(let i=0;i<14;i++){dashes.push({y:i*56});dashes.push({y:i*56+14});}}
 
 function usePU(t){
   if(held[t]<=0)return;
   held[t]--;updateSlots();
-  if(t==='fire'){projs.push({x:P.x,y:P.y-P.h*.5,vy:-17,dead:false});burst(P.x,P.y-24,['#EF9F27','#E24B4A','#FAC775'],8);}
-  if(t==='fly'&&!P.flying){P.flying=true;P.flyT=0;P.flyH=0;}
-  if(t==='boost'){P.boosting=true;P.boostT=75;burst(P.x,P.y+20,['#1D9E75','#9FE1CB','#fff'],8);}
+  if(t==='fire'){
+    const bullets=gameMode==='dawn'?5:3;
+    for(let b=0;b<bullets;b++){
+      setTimeout(()=>{
+        if(state==='playing')projs.push({x:P.x+(Math.random()-.5)*8,y:P.y-P.h*.5,vy:-17,dead:false});
+      },b*80);
+    }
+    sndFire();
+    burst(P.x,P.y-24,['#EF9F27','#E24B4A','#FAC775'],8);
+  }
+  if(t==='fly'&&!P.flying){P.flying=true;P.flyT=0;P.flyH=0;sndFly();burst(P.x,P.y,['#7F77DD','#AFA9EC','#fff'],8);}
+  if(t==='boost'){P.boosting=true;P.boostT=80;P.invincT=420;sndBoost();burst(P.x,P.y+20,['#1D9E75','#9FE1CB','#fff'],10);}
 }
 
 function updateSlots(){
@@ -190,9 +210,12 @@ function updateSlots(){
 function spawnNpc(){
   const li=Math.floor(Math.random()*3);
   const normCols=['#BA7517','#534AB7','#0F6E56','#A32D2D','#185FA5','#7F77DD'];
-  const zombieCols=['#3B6D11','#27500A','#639922','#1D6B1D','#4a7a2a','#2d5c2d'];
-  const cols=gameMode==='night'?zombieCols:normCols;
-  npcs.push({x:LANES[li],y:-70,w:26,h:46,color:cols[Math.floor(Math.random()*cols.length)],spd:speed*.38+Math.random()*1.4,stunT:0,flashT:0,dead:false,zombie:gameMode==='night'});
+  const zombieCols=['#3B6D11','#27500A','#639922','#1D6B1D','#4a7a2a'];
+  const isDawn=gameMode==='dawn';
+  // In dawn mode: 50% zombie car, 50% runner pedestrian
+  const type=isDawn?(Math.random()<0.5?'zombie':'runner'):'car';
+  const cols=isDawn&&type==='zombie'?zombieCols:normCols;
+  npcs.push({x:LANES[li],y:-70,w:type==='runner'?14:26,h:type==='runner'?30:46,color:cols[Math.floor(Math.random()*cols.length)],spd:speed*(type==='runner'?.55:.38)+Math.random()*1.4,stunT:0,flashT:0,dead:false,type:type,wobble:0,wobbleDir:1});
 }
 
 function spawnPU(){
@@ -206,16 +229,18 @@ function burst(x,y,cols,n){
 }
 function doExhaust(x,y){
   if(Math.random()>.5)return;
-  particles.push({x:x+(Math.random()-.5)*10,y,vx:(Math.random()-.5)*.4,vy:speed*.1+Math.random()*.3,sz:4+Math.floor(Math.random()*3)*2,al:.5,c:gameMode==='night'?'#3B6D11':'#B4B2A9',life:20});
+  particles.push({x:x+(Math.random()-.5)*10,y,vx:(Math.random()-.5)*.4,vy:speed*.1+Math.random()*.3,sz:4+Math.floor(Math.random()*3)*2,al:.5,c:gameMode==='dawn'?'#cc8844':'#B4B2A9',life:20});
 }
 function crashFx(x,y){
   const cols=['#FAC775','#E24B4A','#FCEBEB','#888780','#D3D1C7'];
   for(let i=0;i<22;i++){const a=Math.random()*Math.PI*2,s=1.5+Math.random()*6;particles.push({x,y,vx:Math.cos(a)*s,vy:Math.sin(a)*s-3,sz:4+Math.floor(Math.random()*3)*2,al:1,c:cols[Math.floor(Math.random()*5)],life:50});}
 }
+function bloodFx(x,y){
+  for(let i=0;i<16;i++){const a=Math.random()*Math.PI*2,s=1+Math.random()*4;particles.push({x,y,vx:Math.cos(a)*s,vy:Math.sin(a)*s-1,sz:3+Math.floor(Math.random()*3)*2,al:1,c:Math.random()>.5?'#9a0000':'#cc2222',life:40});}
+}
 
-// ---- CAR DRAWING ----
 function drawCar(c,cx,cy,body,roof,wh,jh,wobble){
-  wobble=wobble||0;
+  wobble=wobble||0;jh=jh||0;
   const x=Math.round(cx-14),y=Math.round(cy-26-jh);
   if(jh>2){c.fillStyle='rgba(0,0,0,0.18)';c.fillRect(x+2,Math.round(cy+22),24,6);}
   c.fillStyle=body;c.fillRect(x,y,28,50);
@@ -232,7 +257,6 @@ function drawCar(c,cx,cy,body,roof,wh,jh,wobble){
   c.fillStyle='#E24B4A';c.fillRect(x+4,y+45,8,4);c.fillRect(x+16,y+45,8,4);
   c.fillStyle='rgba(255,255,255,0.15)';c.fillRect(x+12,y,4,50);
   if(jh>2){
-    // wings
     c.fillStyle='#7F77DD';
     c.fillRect(x-12,y+16+Math.round(wobble),10,6);
     c.fillRect(x+30,y+16-Math.round(wobble),10,6);
@@ -242,48 +266,56 @@ function drawCar(c,cx,cy,body,roof,wh,jh,wobble){
   }
 }
 
+function drawRunner(n){
+  if(n.flashT>0&&Math.floor(n.flashT/3)%2===0)return;
+  const x=Math.round(n.x-7),y=Math.round(n.y-15);
+  n.wobble+=(n.wobbleDir*.3);
+  if(Math.abs(n.wobble)>4)n.wobbleDir*=-1;
+  const w=n.wobble;
+  // body
+  ctx.fillStyle='#F5CBA7';ctx.fillRect(x+2,y,10,10);
+  ctx.fillStyle=n.color;ctx.fillRect(x,y+10,14,12);
+  // legs running
+  ctx.fillStyle='#555';
+  ctx.fillRect(x+1,y+22,5,8+Math.round(w));
+  ctx.fillRect(x+8,y+22,5,8-Math.round(w));
+  // arms
+  ctx.fillStyle=n.color;
+  ctx.fillRect(x-3,y+12+Math.round(w),4,6);
+  ctx.fillRect(x+13,y+12-Math.round(w),4,6);
+  // panic lines
+  if(Math.abs(w)>2){
+    ctx.fillStyle='rgba(255,100,100,0.7)';
+    ctx.fillRect(x+16,y+2,2,2);ctx.fillRect(x+18,y+5,2,2);
+  }
+}
+
 function drawZombieCar(n){
   if(n.flashT>0&&Math.floor(n.flashT/3)%2===0)return;
   const x=Math.round(n.x-13),y=Math.round(n.y-23);
   const eyePulse=0.55+0.45*Math.abs(Math.sin(roadY*0.04+n.x*0.07));
-
   ctx.fillStyle=n.color;ctx.fillRect(x,y,26,46);
-  // green shimmer stripe
   ctx.fillStyle=`rgba(57,255,20,${eyePulse*0.22})`;ctx.fillRect(x,y,26,4);
-
   ctx.fillStyle='#1a1a18';
   ctx.fillRect(x-2,y+2,5,9);ctx.fillRect(x+23,y+2,5,9);
   ctx.fillRect(x-2,y+30,5,9);ctx.fillRect(x+23,y+30,5,9);
   ctx.fillStyle='#111';
   ctx.fillRect(x,y+3,3,6);ctx.fillRect(x+23,y+3,3,6);
   ctx.fillRect(x,y+31,3,6);ctx.fillRect(x+23,y+31,3,6);
-  // cracked windshield
   ctx.fillStyle='#1a2a1a';ctx.fillRect(x+4,y+10,18,20);
   ctx.fillStyle='rgba(100,200,100,0.3)';ctx.fillRect(x+6,y+12,14,6);
-  // crack lines
   ctx.strokeStyle='rgba(57,255,20,0.4)';ctx.lineWidth=1;
   ctx.beginPath();ctx.moveTo(x+8,y+10);ctx.lineTo(x+13,y+22);ctx.stroke();
   ctx.beginPath();ctx.moveTo(x+13,y+22);ctx.lineTo(x+18,y+16);ctx.stroke();
-  // blood drips
   ctx.fillStyle='#9a0000';
   ctx.fillRect(x+5,y+2,2,6);ctx.fillRect(x+16,y+1,2,8);ctx.fillRect(x+11,y+3,1,4);
-  // glowing eyes — pulsing size & brightness
   ctx.fillStyle=`rgba(57,255,20,${eyePulse})`;
   ctx.fillRect(x+5,y+13,5,5);ctx.fillRect(x+15,y+13,5,5);
   ctx.fillStyle=`rgba(200,255,200,${eyePulse})`;
   ctx.fillRect(x+6,y+14,3,3);ctx.fillRect(x+16,y+14,3,3);
-  // eye glow halo (screen blend)
-  ctx.save();
-  ctx.globalCompositeOperation='screen';
-  const g1=ctx.createRadialGradient(x+7,y+15,0,x+7,y+15,15);
-  g1.addColorStop(0,`rgba(57,255,20,${eyePulse*0.9})`);
-  g1.addColorStop(1,'rgba(57,255,20,0)');
-  ctx.fillStyle=g1;ctx.fillRect(x-7,y+1,28,28);
-  ctx.restore();
 }
 
-function drawNpc(n){
-  if(n.zombie){drawZombieCar(n);return;}
+function drawNormalCar(n){
   if(n.flashT>0&&Math.floor(n.flashT/3)%2===0)return;
   const x=Math.round(n.x-13),y=Math.round(n.y-23);
   ctx.fillStyle=n.color;ctx.fillRect(x,y,26,46);
@@ -297,6 +329,12 @@ function drawNpc(n){
   ctx.fillStyle='#b0c8d8';ctx.fillRect(x+6,y+12,14,6);
   ctx.fillStyle='#FAC775';ctx.fillRect(x+7,y+1,12,3);
   ctx.fillStyle='rgba(255,255,255,0.12)';ctx.fillRect(x+11,y,4,46);
+}
+
+function drawNpc(n){
+  if(n.type==='runner'){drawRunner(n);return;}
+  if(n.type==='zombie'){drawZombieCar(n);return;}
+  drawNormalCar(n);
 }
 
 function drawPU(p){
@@ -321,198 +359,199 @@ function drawParticles(){
   ctx.globalAlpha=1;
 }
 
-function drawNightBg(){
-  // dark sky
-  ctx.fillStyle='#05080F';ctx.fillRect(0,0,W,H);
-  // stars
-  for(let i=0;i<40;i++){
+// Dawn sky: warm gradient with horizon glow
+function drawDawnSky(scroll,home){
+  const skyH=home?420:H;
+  // deep indigo top
+  ctx.fillStyle='#1a1035';ctx.fillRect(0,0,W,skyH*.35);
+  // purple mid
+  ctx.fillStyle='#3d1f5c';ctx.fillRect(0,skyH*.3,W,skyH*.15);
+  // orange horizon glow
+  ctx.fillStyle='#7a2e00';ctx.fillRect(0,skyH*.42,W,skyH*.12);
+  ctx.fillStyle='#c45200';ctx.fillRect(0,skyH*.5,W,skyH*.07);
+  ctx.fillStyle='#f08020';ctx.fillRect(0,skyH*.55,W,skyH*.04);
+  ctx.fillStyle='#ffd080';ctx.fillRect(0,skyH*.57,W,skyH*.02);
+  // stars (only visible in top half)
+  for(let i=0;i<35;i++){
     const sx=(Math.sin(i*137.5)*0.5+0.5)*W;
-    const sy=(Math.cos(i*97.3)*0.5+0.5)*H*.4;
-    ctx.fillStyle=`rgba(255,255,220,${0.3+0.7*Math.abs(Math.sin(roadY*.01+i))})`;
+    const sy=(Math.cos(i*97.3)*0.5+0.5)*skyH*.45;
+    const br=0.2+0.5*Math.abs(Math.sin((scroll||0)*0.008+i));
+    ctx.fillStyle=`rgba(255,255,220,${br})`;
     ctx.fillRect(Math.round(sx),Math.round(sy),2,2);
   }
-  // dark grass
-  ctx.fillStyle='#0a120a';ctx.fillRect(0,0,RL,H);
-  ctx.fillStyle='#0a120a';ctx.fillRect(RR,0,W-RR,H);
-  // road
-  for(let i=-20;i<H+20;i+=24){
+  // sun peeking at horizon
+  const sunX=W*.62,sunY=skyH*.57;
+  ctx.fillStyle='#FFD080';ctx.fillRect(sunX-14,sunY-4,28,8);
+  ctx.fillStyle='#FFF0A0';ctx.fillRect(sunX-8,sunY-8,16,16);
+  ctx.fillStyle='rgba(255,200,80,0.3)';ctx.fillRect(sunX-30,sunY-20,60,40);
+}
+
+function drawDawnBg(){
+  ctx.clearRect(0,0,W,H);
+  drawDawnSky(dawnScroll,false);
+  // ground sides — dark earth tone
+  ctx.fillStyle='#2a1a08';ctx.fillRect(0,0,RL,H);
+  ctx.fillStyle='#2a1a08';ctx.fillRect(RR,0,W-RR,H);
+  // grass tint
+  ctx.fillStyle='#1a2a08';ctx.fillRect(0,H*.55,RL,H*.45);
+  ctx.fillStyle='#1a2a08';ctx.fillRect(RR,H*.55,W-RR,H*.45);
+  // road — solid dark asphalt, no blue
+  for(let i=-24;i<H+24;i+=24){
     const tile=Math.floor((i+roadY)/24);
-    ctx.fillStyle=tile%2===0?'#0e0e0d':'#141412';
+    ctx.fillStyle=tile%2===0?'#1c1812':'#211e14';
     ctx.fillRect(RL,i-(roadY%24)+Math.floor(roadY/24)*24-24,RW,24);
   }
-  ctx.fillStyle='#333';ctx.fillRect(RL-8,0,8,H);ctx.fillRect(RR,0,8,H);
-  ctx.fillStyle='#555';ctx.fillRect(RL-9,0,2,H);ctx.fillRect(RR+7,0,2,H);
+  // road shoulders
+  ctx.fillStyle='#3a2e1a';ctx.fillRect(RL-8,0,8,H);ctx.fillRect(RR,0,8,H);
+  ctx.fillStyle='#5a4a2a';ctx.fillRect(RL-9,0,2,H);ctx.fillRect(RR+7,0,2,H);
+  // lane dashes — warm amber at dawn
   for(let d of dashes){
-    ctx.fillStyle='rgba(255,255,150,0.4)';
+    ctx.fillStyle='rgba(250,180,60,0.75)';
     ctx.fillRect(RL+LW-2,d.y,4,14);ctx.fillRect(RL+LW*2-2,d.y,4,14);
   }
-  // spooky trees
-  const treeXs=[[8,80,H*.3],[30,150,H*.5],[50,240,H*.4],[6,350,H*.6],[28,420,H*.3],[RR+10,90,H*.4],[RR+35,200,H*.5],[RR+12,310,H*.35],[RR+40,430,H*.45]];
+  // silhouette trees on sides
+  const treeXs=[[8,80,H*.3],[28,160,H*.45],[15,250,H*.35],[6,350,H*.5],[RR+10,100,H*.4],[RR+30,200,H*.35],[RR+14,320,H*.5]];
   for(let [bx,by,ht] of treeXs){
-    by=(by+roadY*.6)%H;
-    ctx.fillStyle='#0a0a08';
-    ctx.fillRect(bx-2,by-ht,4,ht);
-    // branches
-    ctx.fillRect(bx-12,by-ht*.7,10,2);
-    ctx.fillRect(bx+2,by-ht*.55,10,2);
-    ctx.fillRect(bx-8,by-ht*.4,7,2);
+    by=((by+roadY*.5)%H);
+    ctx.fillStyle='#0d0808';
+    ctx.fillRect(bx-3,by-ht,6,ht);
+    ctx.fillRect(bx-14,by-ht*.8,10,3);
+    ctx.fillRect(bx+3,by-ht*.65,10,3);
+    ctx.fillRect(bx-10,by-ht*.45,7,3);
   }
 }
 
 function drawNormalBg(){
-  ctx.fillStyle='#0C447C';ctx.fillRect(0,0,W,H);
-  ctx.fillStyle='#1a2a3a';ctx.fillRect(0,0,RL,H);ctx.fillStyle='#1a2a3a';ctx.fillRect(RR,0,W-RR,H);
-  for(let row=0;row<5;row++){ctx.fillStyle=row%2===0?'#1e3040':'#162535';ctx.fillRect(0,70+row*14,RL,14);ctx.fillRect(RR,70+row*14,W-RR,14);}
-  ctx.fillStyle='#444441';ctx.fillRect(RL-8,0,8,H);ctx.fillRect(RR,0,8,H);
-  ctx.fillStyle='#888780';ctx.fillRect(RL-9,0,2,H);ctx.fillRect(RR+7,0,2,H);
-  for(let i=-20;i<H+20;i+=24){
+  ctx.clearRect(0,0,W,H);
+  // proper blue sky — bright, no glitch
+  ctx.fillStyle='#4a8cc0';ctx.fillRect(0,0,W,H);
+  ctx.fillStyle='#3a7ab0';ctx.fillRect(0,0,RL,H);ctx.fillStyle='#3a7ab0';ctx.fillRect(RR,0,W-RR,H);
+  // crowd stands
+  for(let row=0;row<5;row++){
+    ctx.fillStyle=row%2===0?'#2a5a8a':'#225080';
+    ctx.fillRect(0,60+row*14,RL,14);ctx.fillRect(RR,60+row*14,W-RR,14);
+  }
+  // road — solid gray asphalt tiles
+  for(let i=-24;i<H+24;i+=24){
     const tile=Math.floor((i+roadY)/24);
-    ctx.fillStyle=tile%2===0?'#252523':'#2e2e2b';
+    ctx.fillStyle=tile%2===0?'#2a2a28':'#323230';
     ctx.fillRect(RL,i-(roadY%24)+Math.floor(roadY/24)*24-24,RW,24);
   }
+  // shoulders
+  ctx.fillStyle='#444441';ctx.fillRect(RL-8,0,8,H);ctx.fillRect(RR,0,8,H);
+  ctx.fillStyle='#888780';ctx.fillRect(RL-9,0,2,H);ctx.fillRect(RR+7,0,2,H);
+  // lane dashes
   for(let d of dashes){
     ctx.fillStyle='rgba(250,199,117,0.85)';
     ctx.fillRect(RL+LW-2,d.y,4,14);ctx.fillRect(RL+LW*2-2,d.y,4,14);
   }
-  // simple crowd
+  // crowd animation
   const crowdAnim=roadY*.01;
   for(let side=0;side<2;side++){
     const bx=side===0?8:RR+8;
     for(let ci=0;ci<16;ci++){
       const cx2=bx+ci%5*12+(Math.floor(ci/5))*3;
-      const cy2=85+Math.floor(ci/5)*13;
+      const cy2=75+Math.floor(ci/5)*13;
       const bob=Math.sin(crowdAnim+ci)*.8;
       const shirts=['#E24B4A','#378ADD','#1D9E75','#BA7517','#534AB7','#D4537E'];
       ctx.fillStyle=shirts[ci%6];ctx.fillRect(cx2-4,cy2+bob-2,8,8);
       ctx.fillStyle='#F5CBA7';ctx.fillRect(cx2-3,cy2+bob-9,6,6);
-      ctx.fillStyle=shirts[ci%6];
-      const wv=Math.sin(crowdAnim*1.2+ci)*2;
-      ctx.fillRect(cx2-7,cy2+bob-3+wv,3,4);ctx.fillRect(cx2+4,cy2+bob-3-wv,3,4);
     }
   }
 }
 
-function drawFlashlight(){
+// Dawn flashlight / cone
+let flashDrift=0;
+function drawDawnFlashlight(){
   const px=Math.round(P.x),py=Math.round(P.y-20);
-  // very gentle, slow sway — stable like a held flashlight
-  flashDrift+=0.012;
-  const sw=Math.sin(flashDrift)*0.04;
-  const coneAng=Math.PI*0.30;
+  flashDrift+=0.01;
+  const sw=Math.sin(flashDrift)*0.03;
+  const coneAng=Math.PI*0.28;
   const dir=-Math.PI/2+sw;
-  const coneLen=260;
-
-  // ambient zombie eye glows visible through darkness
-  for(let n of npcs){
-    if(!n.zombie||n.dead)continue;
-    const ey=n.y-10;
-    const eyePulse=0.35+0.25*Math.abs(Math.sin(roadY*0.03+n.x*0.07));
-    ctx.save();
-    ctx.globalCompositeOperation='screen';
-    const eyeGrad=ctx.createRadialGradient(n.x,ey,0,n.x,ey,22);
-    eyeGrad.addColorStop(0,`rgba(57,255,20,${eyePulse})`);
-    eyeGrad.addColorStop(1,'rgba(57,255,20,0)');
-    ctx.fillStyle=eyeGrad;
-    ctx.fillRect(n.x-22,ey-22,44,44);
-    ctx.restore();
-  }
-
-  // solid, stable darkness overlay
-  ctx.fillStyle='rgba(0,0,0,0.91)';
+  const coneLen=240;
+  // partial darkness — dawn has ambient light so overlay is lighter
+  ctx.fillStyle='rgba(0,0,0,0.62)';
   ctx.fillRect(0,0,W,H);
-
-  // cut a clean cone out of the darkness
   ctx.save();
   ctx.globalCompositeOperation='destination-out';
   const grad=ctx.createRadialGradient(px,py,0,px,py,coneLen);
   grad.addColorStop(0,'rgba(0,0,0,1)');
-  grad.addColorStop(0.45,'rgba(0,0,0,1)');
-  grad.addColorStop(0.75,'rgba(0,0,0,0.75)');
-  grad.addColorStop(0.92,'rgba(0,0,0,0.25)');
+  grad.addColorStop(0.5,'rgba(0,0,0,1)');
+  grad.addColorStop(0.8,'rgba(0,0,0,0.6)');
   grad.addColorStop(1,'rgba(0,0,0,0)');
   ctx.fillStyle=grad;
-  ctx.beginPath();
-  ctx.moveTo(px,py);
+  ctx.beginPath();ctx.moveTo(px,py);
   ctx.arc(px,py,coneLen,dir-coneAng,dir+coneAng);
-  ctx.closePath();
-  ctx.fill();
+  ctx.closePath();ctx.fill();
   ctx.restore();
-
-  // soft warm tint inside cone — subtle, not white-blasting
+  // warm dawn tint in cone
   ctx.save();
   ctx.globalCompositeOperation='source-over';
-  const warm=ctx.createRadialGradient(px,py,8,px,py,coneLen*0.8);
-  warm.addColorStop(0,'rgba(255,220,140,0.10)');
-  warm.addColorStop(0.3,'rgba(255,210,120,0.06)');
-  warm.addColorStop(0.7,'rgba(255,200,100,0.02)');
-  warm.addColorStop(1,'rgba(255,200,100,0)');
+  const warm=ctx.createRadialGradient(px,py,8,px,py,coneLen*.7);
+  warm.addColorStop(0,'rgba(255,180,80,0.12)');
+  warm.addColorStop(0.5,'rgba(255,160,60,0.06)');
+  warm.addColorStop(1,'rgba(255,140,40,0)');
   ctx.fillStyle=warm;
-  ctx.beginPath();
-  ctx.moveTo(px,py);
-  ctx.arc(px,py,coneLen*0.8,dir-coneAng,dir+coneAng);
-  ctx.closePath();
-  ctx.fill();
+  ctx.beginPath();ctx.moveTo(px,py);
+  ctx.arc(px,py,coneLen*.7,dir-coneAng,dir+coneAng);
+  ctx.closePath();ctx.fill();
   ctx.restore();
-
-  // zombie outline highlight when inside beam
-  for(let n of npcs){
-    if(!n.zombie||n.dead)continue;
-    const dx=n.x-px, dy=n.y-py;
-    const dist=Math.sqrt(dx*dx+dy*dy);
-    const angle=Math.atan2(dy,dx);
-    let ad=angle-dir;
-    while(ad>Math.PI)ad-=Math.PI*2;
-    while(ad<-Math.PI)ad+=Math.PI*2;
-    if(Math.abs(ad)<coneAng&&dist<coneLen){
-      const vis=Math.max(0,1-dist/coneLen)*0.85;
-      ctx.save();
-      ctx.strokeStyle=`rgba(80,255,40,${vis})`;
-      ctx.lineWidth=2;
-      ctx.strokeRect(n.x-14,n.y-24,28,48);
-      ctx.restore();
-    }
-  }
 }
 
 function drawHUD(){
-  const hp=P.hp;
-  for(let i=0;i<(gameMode==='night'?4:3);i++){ctx.fillStyle=i<hp?'#E24B4A':'#444441';ctx.fillRect(RL+4+i*16,6,12,10);}
-  if(P.boosting){ctx.fillStyle='#1D9E75';ctx.fillRect(RL+4,20,Math.round((P.boostT/75)*50),6);ctx.strokeStyle='#0F6E56';ctx.lineWidth=1;ctx.strokeRect(RL+4,20,50,6);}
+  const maxHP=gameMode==='dawn'?4:3;
+  for(let i=0;i<maxHP;i++){ctx.fillStyle=i<P.hp?'#E24B4A':'#444441';ctx.fillRect(RL+4+i*16,6,12,10);}
+  // invincibility bar
+  if(P.invincT>0){
+    const maxI=420;
+    ctx.fillStyle='#EF9F27';ctx.fillRect(RL+4,20,Math.round((P.invincT/maxI)*60),6);
+    ctx.strokeStyle='#BA7517';ctx.lineWidth=1;ctx.strokeRect(RL+4,20,60,6);
+    // flashing border on player during invincibility
+  }
+  if(P.boosting){ctx.fillStyle='#1D9E75';ctx.fillRect(RL+4,P.invincT>0?30:20,Math.round((P.boostT/80)*50),6);ctx.strokeStyle='#0F6E56';ctx.lineWidth=1;ctx.strokeRect(RL+4,P.invincT>0?30:20,50,6);}
   if(P.flying){
-    const rem=Math.max(0,1-(P.flyT/(60*5)));
-    ctx.fillStyle='#7F77DD';ctx.fillRect(RL+4,P.boosting?30:20,Math.round(rem*50),6);
-    ctx.strokeStyle='#534AB7';ctx.lineWidth=1;ctx.strokeRect(RL+4,P.boosting?30:20,50,6);
+    const maxFly=420;
+    const rem=Math.max(0,1-(P.flyT/maxFly));
+    const yy=P.invincT>0?(P.boosting?40:30):(P.boosting?30:20);
+    ctx.fillStyle='#7F77DD';ctx.fillRect(RL+4,yy,Math.round(rem*50),6);
+    ctx.strokeStyle='#534AB7';ctx.lineWidth=1;ctx.strokeRect(RL+4,yy,50,6);
   }
 }
 
-function col(a,b){return Math.abs(a.x-b.x)<(a.w/2+b.w/2)-5&&Math.abs(a.y-b.y)<(a.h/2+b.h/2)-5;}
-function hitP(){P.hp--;P.flashT=70;P.stunT=24;crashFx(P.x,P.y);if(P.hp<=0){showGameOver();}}
+function col(a,b){return Math.abs(a.x-b.x)<(a.w/2+b.w/2)-4&&Math.abs(a.y-b.y)<(a.h/2+b.h/2)-4;}
+function hitP(){
+  if(P.invincT>0||P.flying&&P.flyH>10)return false;
+  P.hp--;P.flashT=70;P.stunT=24;crashFx(P.x,P.y);sndCrash();
+  if(P.hp<=0){showGameOver();return true;}
+  return false;
+}
 
-let wingWobble=0;
+let engineTick=0;
 function loop(ts){
   if(state!=='playing')return;
   if(!lastTS)lastTS=ts;
   const dt=Math.min((ts-lastTS)/16.667,3);lastTS=ts;
+  dawnScroll+=speed*dt;
 
   const throttle=keys['ArrowUp']||keys['w']||keys['W'];
-  targetSpeed=throttle||P.boosting?Math.min(targetSpeed+.12,P.boosting?MAX:MAX*.85):Math.max(targetSpeed-.07,BASE);
+  const boostSpeedMult=P.boosting?1:0.85;
+  targetSpeed=throttle||P.boosting?Math.min(targetSpeed+.12,MAX*boostSpeedMult):Math.max(targetSpeed-.07,BASE);
   speed+=(targetSpeed-speed)*.18;
 
   if(P.boosting){P.boostT-=dt;if(P.boostT<=0)P.boosting=false;}
+  if(P.invincT>0)P.invincT-=dt;
   if(P.stunT>0)P.stunT-=dt;
   if(P.flashT>0)P.flashT-=dt;
 
-  // fly: 5 seconds = 300 frames @60fps
+  // fly: 7 seconds = 420 frames @60fps
+  const maxFlyFrames=420;
   if(P.flying){
     P.flyT+=dt;
-    const maxFlyFrames=300;
-    const progress=P.flyT/maxFlyFrames;
-    if(progress<1){
-      // smooth rise and hover
+    if(P.flyT<maxFlyFrames){
       const riseT=Math.min(P.flyT/20,1);
       P.flyH=riseT*52;
       wingWobble=Math.sin(P.flyT*.25)*5;
-    } else {
-      // land smoothly
+    }else{
       P.flyH=Math.max(0,P.flyH-3*dt);
       if(P.flyH<=0){P.flying=false;P.flyH=0;wingWobble=0;}
     }
@@ -529,20 +568,24 @@ function loop(ts){
   for(let d of dashes){d.y+=speed*dt;if(d.y>H)d.y-=H*1.2;}
 
   score+=Math.round(speed*.5);
-
   npcT+=dt;if(npcT>=Math.max(28,90-speed*5)){spawnNpc();npcT=0;}
-  puT+=dt;if(puT>=195){spawnPU();puT=0;}
+  puT+=dt;if(puT>=190){spawnPU();puT=0;}
 
   for(let n of npcs){n.y+=(speed-n.spd)*dt;if(n.flashT>0)n.flashT-=dt;}
-  npcs=npcs.filter(n=>!n.dead&&n.y<H+80);
+  npcs=npcs.filter(n=>!n.dead&&n.y<H+90);
 
   for(let pr of projs){pr.y+=pr.vy*dt;}
   projs=projs.filter(pr=>!pr.dead&&pr.y>-30&&pr.y<H+30);
 
+  // bullet hits enemies
   for(let pr of projs){
     for(let n of npcs){
-      if(!pr.dead&&Math.abs(pr.x-n.x)<16&&Math.abs(pr.y-n.y)<30){
-        crashFx(n.x,n.y);n.dead=true;pr.dead=true;score+=200;burst(n.x,n.y,['#EF9F27','#E24B4A'],10);
+      if(pr.dead||n.dead)continue;
+      if(Math.abs(pr.x-n.x)<16&&Math.abs(pr.y-n.y)<30){
+        if(n.type==='runner'){bloodFx(n.x,n.y);sndRunnerKill();score+=150;}
+        else{crashFx(n.x,n.y);sndZombieKill();score+=200;}
+        n.dead=true;pr.dead=true;
+        burst(n.x,n.y,['#EF9F27','#E24B4A'],8);
       }
     }
   }
@@ -550,33 +593,54 @@ function loop(ts){
   for(let p of puItems){
     p.y+=speed*.45*dt;
     if(col(P,{x:p.x,y:p.y,w:18,h:18})){
-      held[p.type]=Math.min(3,held[p.type]+1);updateSlots();
+      held[p.type]=Math.min(p.type==='fire'?(gameMode==='dawn'?5:3):3,held[p.type]+1);
+      updateSlots();sndPickup();
       burst(p.x,p.y,p.type==='fire'?['#E24B4A','#FAC775']:p.type==='fly'?['#7F77DD','#AFA9EC']:['#1D9E75','#9FE1CB'],7);
       p.dead=true;
     }
   }
   puItems=puItems.filter(p=>!p.dead&&p.y<H+40);
 
-  const flying=P.flying&&P.flyH>10;
-  if(P.flashT<=0){
-    for(let n of npcs){
-      if(!flying&&col(P,n)){
-        if(n.stunT>0){crashFx(n.x,n.y);n.dead=true;score+=100;}
-        else{hitP();if(state!=='playing')return;}
-        break;
+  const isFlying=P.flying&&P.flyH>10;
+  const isInvinc=P.invincT>0;
+
+  for(let n of npcs){
+    if(n.dead)continue;
+    if(col(P,n)){
+      if(isFlying){
+        // fly over / take over — kill enemy, score
+        if(n.type==='runner'){bloodFx(n.x,n.y);sndRunnerKill();score+=150;}
+        else if(n.type==='zombie'){sndZombieKill();score+=250;}
+        else{crashFx(n.x,n.y);sndCrash();score+=100;}
+        n.dead=true;
+        burst(n.x,n.y,['#7F77DD','#FAC775','#fff'],10);
+      }else if(isInvinc){
+        // boost invincibility — ram through, score
+        if(n.type==='runner'){bloodFx(n.x,n.y);sndRunnerKill();score+=120;}
+        else if(n.type==='zombie'){crashFx(n.x,n.y);sndZombieKill();score+=180;}
+        else{crashFx(n.x,n.y);score+=80;}
+        n.dead=true;
+        burst(n.x,n.y,['#1D9E75','#9FE1CB','#FAC775'],8);
+      }else{
+        if(hitP())return;
       }
+      break;
     }
-    if(!flying&&(P.x<=RL+P.w/2+3||P.x>=RR-P.w/2-3)){hitP();if(state!=='playing')return;}
+  }
+  if(!isFlying&&!isInvinc&&P.flashT<=0&&(P.x<=RL+P.w/2+3||P.x>=RR-P.w/2-3)){
+    if(hitP())return;
   }
 
   doExhaust(P.x,P.y+P.h*.5);
   for(let p of particles){p.x+=p.vx;p.y+=p.vy;p.vy+=.09;p.al-=.022;p.life--;}
   particles=particles.filter(p=>p.life>0&&p.al>0);
 
-  // RENDER
-  ctx.clearRect(0,0,W,H);
+  // engine sound
+  engineTick+=dt;
+  if(engineTick>8){engineTick=0;sndEngineTick();}
 
-  if(gameMode==='night') drawNightBg();
+  // RENDER
+  if(gameMode==='dawn')drawDawnBg();
   else drawNormalBg();
 
   drawParticles();
@@ -584,28 +648,34 @@ function loop(ts){
   for(let n of npcs)drawNpc(n);
   for(let pr of projs)drawProj(pr);
 
+  // Player — flash when hit, golden shimmer when invincible
   const showP=!(P.flashT>0&&Math.floor(P.flashT/4)%2===0);
-  if(showP)drawCar(ctx,P.x,P.y,'#E24B4A','#FCEBEB','#2C2C2A',P.flyH||0,wingWobble);
+  if(showP){
+    if(isInvinc&&Math.floor(P.invincT/6)%2===0){
+      // golden tint for invincibility
+      drawCar(ctx,P.x,P.y,'#EF9F27','#FAC775','#2C2C2A',P.flyH||0,wingWobble);
+    }else{
+      drawCar(ctx,P.x,P.y,'#E24B4A','#FCEBEB','#2C2C2A',P.flyH||0,wingWobble);
+    }
+  }
 
-  if(gameMode==='night') drawFlashlight();
+  if(gameMode==='dawn')drawDawnFlashlight();
 
   drawHUD();
 
-  // score / speed readout
-  ctx.fillStyle=gameMode==='night'?'rgba(150,255,150,0.7)':'rgba(255,255,255,0.6)';
+  ctx.fillStyle=gameMode==='dawn'?'rgba(255,180,80,0.8)':'rgba(255,255,255,0.65)';
   ctx.font='9px monospace';ctx.textAlign='right';
   ctx.fillText('SCORE '+score,RR-4,H-6);
 
   document.getElementById('sv').textContent=Math.round((speed/MAX)*220);
   document.getElementById('sc').textContent=score;
   document.getElementById('bs').textContent=best[gameMode];
-  document.getElementById('hp').textContent='♥'.repeat(Math.max(0,P.hp))+'♡'.repeat(Math.max(0,(gameMode==='night'?4:3)-P.hp));
+  const maxHP=gameMode==='dawn'?4:3;
+  document.getElementById('hp').textContent='♥'.repeat(Math.max(0,P.hp))+'♡'.repeat(Math.max(0,maxHP-P.hp));
 
   raf=requestAnimationFrame(loop);
 }
 
-// init
 showHome();
 })();
 </script>
-</body></html>
